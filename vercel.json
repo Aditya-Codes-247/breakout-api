@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/**/*.ts": { "runtime": "@vercel/node", "maxDuration": 120 }
+    "api/**/*.ts": { "maxDuration": 120 }
   },
   "headers": [
     {

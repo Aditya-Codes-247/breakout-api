@@ -41,6 +41,37 @@ async def scan(sme: bool = Query(False), response: Response = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/debug")
+async def debug():
+    import httpx, yfinance as yf
+    results = {}
+
+    try:
+        r = httpx.get(
+            "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv",
+            headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.nseindia.com/"},
+            timeout=10, follow_redirects=True
+        )
+        results["nse_csv"] = f"{r.status_code} — {len(r.text)} chars"
+    except Exception as e:
+        results["nse_csv"] = f"FAILED: {e}"
+
+    try:
+        t = yf.Ticker("TCS.NS")
+        hist = t.history(period="2d")
+        results["yfinance"] = f"OK — {len(hist)} rows" if not hist.empty else "EMPTY"
+    except Exception as e:
+        results["yfinance"] = f"FAILED: {e}"
+
+    try:
+        from nsepython import nse_eq_symbols
+        syms = nse_eq_symbols()
+        results["nsepython"] = f"OK — {len(syms)} symbols"
+    except Exception as e:
+        results["nsepython"] = f"FAILED: {e}"
+
+    return results
+
 @app.get("/api/stock/{symbol}")
 def stock_detail(symbol: str):
     from core.financials import fetch_stock_financials

@@ -11,13 +11,16 @@ export const client = new ScreenerClient({
 function parseNum(val: unknown): number {
   if (val == null || val === '' || val === '-') return 0;
   if (typeof val === 'number') return val;
-  const str = String(val)
-    .replace(/[,₹]/g, '')
-    .replace(/\s*Cr\s*$/i, '')
-    .replace(/\s*Lakh\s*$/i, '')
+  const cleaned = String(val)
+    .replace(/\n/g, '')
+    .replace(/\s+/g, '')
+    .replace(/₹/g, '')
+    .replace(/,/g, '')
+    .replace(/Cr\.?/gi, '')
+    .replace(/%/g, '')
     .trim();
-  const n = parseFloat(str);
-  return isNaN(n) ? 0 : n;
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
 }
 
 function findRow(rows: { title: string; values: (string | number)[] }[], titles: string[]): { title: string; values: (string | number)[] } | undefined {
@@ -42,6 +45,7 @@ async function fetchWithFallback(symbol: string): Promise<any> {
 
 export async function parseFinancials(symbol: string): Promise<ParsedFinancials> {
   const data = await fetchWithFallback(symbol);
+  console.error('DEBUG quarters shape:', JSON.stringify(data.quarters, null, 2).slice(0, 500));
 
   const quarters = data.quarters;
   const quarterLabels: string[] = quarters?.columns ?? [];

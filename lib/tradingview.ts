@@ -33,7 +33,7 @@ export async function fetchNSEUniverse(includeSME: boolean): Promise<TVStock[]> 
     .sortBy(StockField.MARKET_CAPITALIZATION, false)
     .setRange(0, 80);
 
-  const results = await screener.getAll();
+  const results = await screener.get();
 
   return results.map((r: any) => {
     const rawSymbol: string = r.s ?? '';
@@ -67,7 +67,7 @@ export async function fetchPriceReturn1yr(symbols: string[]): Promise<Map<string
       .symbols(symbols)
       .select(StockField.CHANGE_PERCENT.withHistory(252));
 
-    const rows = await screener.getAll();
+    const rows = await screener.get();
 
     for (const r of rows) {
       const rawSymbol: string = r.s ?? '';
@@ -82,7 +82,7 @@ export async function fetchPriceReturn1yr(symbols: string[]): Promise<Map<string
         .symbols(symbols)
         .select(StockField.PERFORMANCE_1_YEAR);
 
-      const rows = await screener.getAll();
+      const rows = await screener.get();
 
       for (const r of rows) {
         const rawSymbol: string = r.s ?? '';

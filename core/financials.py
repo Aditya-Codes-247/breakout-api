@@ -1,7 +1,14 @@
+import os
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from typing import Optional
+
+# Vercel only has /tmp writable — yfinance needs this for its cache
+try:
+    yf.set_tz_cache_location("/tmp/.yf_cache")
+except Exception:
+    pass
 
 def safe_float(val) -> float:
     try:

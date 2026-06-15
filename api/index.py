@@ -1,7 +1,6 @@
 import time
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from mangum import Mangum
 from core.universe import fetch_nse_universe
 from core.pipeline import run_pipeline
 
@@ -52,5 +51,3 @@ def stock_detail(symbol: str):
     data["screener_url"] = f"https://www.screener.in/company/{sym}/"
     data["tv_url"] = f"https://www.tradingview.com/chart/?symbol=NSE:{sym}"
     return data
-
-handler = Mangum(app)

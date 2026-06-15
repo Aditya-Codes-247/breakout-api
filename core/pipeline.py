@@ -15,7 +15,7 @@ def run_pipeline(universe: list[dict]) -> dict:
     symbols = [s["symbol"] for s in universe]
 
     financials_map = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(fetch_stock_financials, sym): sym for sym in symbols}
         for future in concurrent.futures.as_completed(futures):
             sym = futures[future]

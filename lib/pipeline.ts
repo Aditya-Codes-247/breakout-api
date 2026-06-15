@@ -1,6 +1,6 @@
 import type { TVStock } from './tradingview.js';
 import type { ParsedFinancials, BreakoutCandidate } from './types.js';
-import { parseFinancials, getTopRatio } from './screener.js';
+import { parseFinancials } from './screener.js';
 import { fetchPriceReturn1yr } from './tradingview.js';
 import { computeBRS } from './scorer.js';
 
@@ -58,7 +58,10 @@ export async function runPipeline(
     if (!fin) continue;
 
     const patByQ = fin.patByQ;
-    if (patByQ.length < 5) continue;
+    if (patByQ.length < 6) {
+      console.warn(`Skipping ${stock.nseSymbol} — insufficient quarterly PAT data (${patByQ.length} quarters)`);
+      continue;
+    }
 
     const last = patByQ.length - 1;
     const patGrowthLatestQ = computeGrowth(patByQ[last], patByQ[last - 4]);

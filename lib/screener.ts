@@ -1,5 +1,4 @@
 import { ScreenerClient } from 'screener-india';
-import type { CompanyMode } from 'screener-india';
 import type { ParsedFinancials } from './types.js';
 
 export const client = new ScreenerClient({
@@ -10,124 +9,103 @@ export const client = new ScreenerClient({
 });
 
 function parseNum(val: unknown): number {
-  if (val == null || val === '' || val === '-') return 0;
-  if (typeof val === 'number') return val;
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
   const cleaned = String(val)
-    .replace(/\n/g, '')
+    .replace(/\n/g, ' ')
     .replace(/\s+/g, '')
     .replace(/₹/g, '')
     .replace(/,/g, '')
     .replace(/Cr\.?/gi, '')
     .replace(/%/g, '')
     .trim();
+  if (cleaned === '-' || cleaned === '' || cleaned === 'NA') return 0;
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
 }
 
-function findRow(rows: { title: string; values: (string | number)[] }[], titles: string[]): { title: string; values: (string | number)[] } | undefined {
-  return rows.find(r =>
-    titles.some(t => r.title.toLowerCase().includes(t.toLowerCase()))
-  );
-}
-
-function extractValues(rows: { title: string; values: (string | number)[] }[], titles: string[]): number[] {
-  const row = findRow(rows, titles);
-  if (!row) return [];
-  return row.values.map(v => parseNum(v));
-}
-
-async function fetchWithFallback(symbol: string): Promise<any> {
-  try {
-    return await client.getCompany(symbol, 'consolidated');
-  } catch {
-    return await client.getCompany(symbol, 'default' as CompanyMode);
-  }
-}
-
 export async function parseFinancials(symbol: string): Promise<ParsedFinancials> {
-  const data = await fetchWithFallback(symbol);
-  console.error('DEBUG quarters shape:', JSON.stringify(data.quarters, null, 2).slice(0, 500));
-
-  const quarters = data.quarters;
-  const quarterLabels: string[] = quarters?.columns ?? [];
-  const revenueByQ = extractValues(quarters?.rows ?? [], ['Sales', 'Revenue']);
-  const patByQ = extractValues(quarters?.rows ?? [], ['Net Profit', 'PAT']);
-  const opmByQ = extractValues(quarters?.rows ?? [], ['OPM %', 'Operating Profit Margin %']);
-
-  const pl = data.profitLoss;
-  const yearLabels: string[] = pl?.columns ?? [];
-  const revenueByYear = extractValues(pl?.rows ?? [], ['Sales', 'Revenue']);
-  const patByYear = extractValues(pl?.rows ?? [], ['Net Profit', 'PAT']);
-
-  const bs = data.balanceSheet;
-  let debtToEquityByYear: number[] = extractValues(bs?.rows ?? [], ['Debt to equity', 'Debt to Equity']);
-
-  if (debtToEquityByYear.length === 0 && bs?.rows) {
-    const borrowings = extractValues(bs.rows, ['Borrowings']);
-    const equity = extractValues(bs.rows, ['Equity Capital', 'Reserves', 'Shareholders']);
-    const equityPlus = equity.length > 0 ? equity : extractValues(bs.rows, ['Equity']);
-    if (borrowings.length > 0 && equityPlus.length > 0) {
-      const minLen = Math.min(borrowings.length, equityPlus.length);
-      debtToEquityByYear = [];
-      for (let i = 0; i < minLen; i++) {
-        const e = equityPlus[i];
-        debtToEquityByYear.push(e !== 0 ? borrowings[i] / e : 0);
-      }
-    }
-  }
-
-  const cf = data.cashFlow;
-  const operatingCFByYear = extractValues(cf?.rows ?? [], ['Cash from Operations', 'Cash from operations']);
-
-  const ratios = data.ratios;
-  const roceByYear = extractValues(ratios?.rows ?? [], ['ROCE %', 'ROCE']);
-  const roeByYear = extractValues(ratios?.rows ?? [], ['ROE %', 'ROE']);
-
-  const sh = data.shareholding;
-  const promoterByQ = extractValues(sh?.rows ?? [], ['Promoters', 'Promoter']);
-  const fiiByQ = extractValues(sh?.rows ?? [], ['FII', 'Foreign']);
-  const diiByQ = extractValues(sh?.rows ?? [], ['DII', 'Domestic']);
-  const mfCountByQ = extractValues(sh?.rows ?? [], ['No. of shareholders', 'Mutual Fund', 'MF']);
-
-  return {
-    quarterLabels,
-    revenueByQ,
-    patByQ,
-    opmByQ,
-    yearLabels,
-    revenueByYear,
-    patByYear,
-    debtToEquityByYear,
-    operatingCFByYear,
-    roceByYear,
-    roeByYear,
-    promoterByQ,
-    fiiByQ,
-    diiByQ,
-    mfCountByQ,
+  const empty: ParsedFinancials = {
+    quarterLabels: [], revenueByQ: [], patByQ: [], opmByQ: [],
+    yearLabels: [], revenueByYear: [], patByYear: [],
+    debtToEquityByYear: [], operatingCFByYear: [],
+    roceByYear: [], roeByYear: [],
+    promoterByQ: [], fiiByQ: [], diiByQ: [], mfCountByQ: [],
   };
-}
 
-export async function getTopRatio(symbol: string, ratioName: string): Promise<number> {
   try {
-    const data = await client.getCompany(symbol, 'consolidated');
-    const topRatios = data.data?.topRatios;
-    if (!topRatios) return 0;
-    const entry = topRatios.find((r: any) =>
-      r.title?.toLowerCase().includes(ratioName.toLowerCase())
-    );
-    return entry ? parseNum(entry.value) : 0;
-  } catch {
-    try {
-      const data = await client.getCompany(symbol, 'default' as CompanyMode);
-      const topRatios = data.data?.topRatios;
-      if (!topRatios) return 0;
-      const entry = topRatios.find((r: any) =>
-        r.title?.toLowerCase().includes(ratioName.toLowerCase())
+    const [quartersRes, plRes, bsRes, cfRes, ratiosRes, shRes] = await Promise.allSettled([
+      client.getCompanyTab(symbol, 'quarters', 'consolidated'),
+      client.getCompanyTab(symbol, 'profit-loss', 'consolidated'),
+      client.getCompanyTab(symbol, 'balance-sheet', 'consolidated'),
+      client.getCompanyTab(symbol, 'cash-flow', 'consolidated'),
+      client.getCompanyTab(symbol, 'ratios', 'consolidated'),
+      client.getCompanyTab(symbol, 'shareholding', 'consolidated'),
+    ]);
+
+    function extractRow(table: any, ...titleFragments: string[]): number[] {
+      if (!table?.rows) return [];
+      const row = table.rows.find((r: any) =>
+        titleFragments.some(frag =>
+          String(r?.title ?? '').toLowerCase().includes(frag.toLowerCase())
+        )
       );
-      return entry ? parseNum(entry.value) : 0;
-    } catch {
-      return 0;
+      if (!row?.values) return [];
+      return row.values.map((v: any) => parseNum(v));
     }
+
+    function getColumns(table: any): string[] {
+      return table?.columns ?? [];
+    }
+
+    if (quartersRes.status === 'fulfilled') {
+      const t = quartersRes.value.data.quarters;
+      console.log('quarters table sample:', JSON.stringify(t)?.substring(0, 300));
+      empty.quarterLabels = getColumns(t);
+      empty.revenueByQ = extractRow(t, 'sales', 'revenue');
+      empty.patByQ = extractRow(t, 'net profit', 'pat');
+      empty.opmByQ = extractRow(t, 'opm', 'operating profit margin');
+    }
+
+    if (plRes.status === 'fulfilled') {
+      const t = plRes.value.data.profitLoss;
+      empty.yearLabels = getColumns(t);
+      empty.revenueByYear = extractRow(t, 'sales', 'revenue');
+      empty.patByYear = extractRow(t, 'net profit', 'pat');
+    }
+
+    if (bsRes.status === 'fulfilled') {
+      const t = bsRes.value.data.balanceSheet;
+      const borrowings = extractRow(t, 'borrowing');
+      const equity = extractRow(t, 'equity', 'reserve');
+      empty.debtToEquityByYear = borrowings.map((b, i) => {
+        const eq = equity[i] ?? 1;
+        return eq !== 0 ? b / eq : 0;
+      });
+    }
+
+    if (cfRes.status === 'fulfilled') {
+      const t = cfRes.value.data.cashFlow;
+      empty.operatingCFByYear = extractRow(t, 'operating', 'cash from operations');
+    }
+
+    if (ratiosRes.status === 'fulfilled') {
+      const t = ratiosRes.value.data.ratios;
+      empty.roceByYear = extractRow(t, 'roce');
+      empty.roeByYear = extractRow(t, 'roe');
+    }
+
+    if (shRes.status === 'fulfilled') {
+      const t = shRes.value.data.shareholding;
+      empty.promoterByQ = extractRow(t, 'promoter');
+      empty.fiiByQ = extractRow(t, 'fii', 'foreign');
+      empty.diiByQ = extractRow(t, 'dii', 'domestic');
+      empty.mfCountByQ = empty.diiByQ.map(v => v > 0 ? 1 : 0);
+    }
+
+  } catch (err) {
+    console.error(`parseFinancials failed for ${symbol}:`, err);
   }
+
+  return empty;
 }

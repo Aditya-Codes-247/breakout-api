@@ -1,4 +1,5 @@
 import { ScreenerClient } from 'screener-india';
+import type { CompanyMode } from 'screener-india';
 import type { ParsedFinancials } from './types.js';
 
 export const client = new ScreenerClient({
@@ -39,7 +40,7 @@ async function fetchWithFallback(symbol: string): Promise<any> {
   try {
     return await client.getCompany(symbol, 'consolidated');
   } catch {
-    return await client.getCompany(symbol, 'standalone');
+    return await client.getCompany(symbol, 'default' as CompanyMode);
   }
 }
 
@@ -118,7 +119,7 @@ export async function getTopRatio(symbol: string, ratioName: string): Promise<nu
     return entry ? parseNum(entry.value) : 0;
   } catch {
     try {
-      const data = await client.getCompany(symbol, 'standalone');
+      const data = await client.getCompany(symbol, 'default' as CompanyMode);
       const topRatios = data.data?.topRatios;
       if (!topRatios) return 0;
       const entry = topRatios.find((r: any) =>

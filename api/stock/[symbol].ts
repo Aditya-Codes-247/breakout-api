@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { CompanyMode } from 'screener-india';
 import { client, parseFinancials } from '../../lib/screener.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -11,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const [company, financials] = await Promise.all([
-      client.getCompany(upper, 'consolidated').catch(() => client.getCompany(upper, 'standalone')),
+      client.getCompany(upper, 'consolidated').catch(() => client.getCompany(upper, 'default' as CompanyMode)),
       parseFinancials(upper),
     ]);
 

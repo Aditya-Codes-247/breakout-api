@@ -35,7 +35,7 @@ export async function fetchNSEUniverse(includeSME: boolean): Promise<TVStock[]> 
 
   const results = await screener.get();
 
-  return results.map((r: any) => {
+  return results.data.map((r: any) => {
     const rawSymbol: string = r.s ?? '';
     const exchangePrefix = rawSymbol.startsWith('NSE:') || rawSymbol.startsWith('BSE:')
       ? rawSymbol.substring(0, 4)
@@ -56,43 +56,27 @@ export async function fetchNSEUniverse(includeSME: boolean): Promise<TVStock[]> 
   });
 }
 
-export async function fetchPriceReturn1yr(symbols: string[]): Promise<Map<string, number>> {
-  const result = new Map<string, number>();
+export async function fetchPriceReturn1yr(nseSymbols: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
 
-  if (symbols.length === 0) return result;
+  if (nseSymbols.length === 0) return map;
 
   try {
     const screener = new StockScreener()
       .where(StockField.COUNTRY.eq('India'))
-      .symbols(symbols)
-      .select(StockField.CHANGE_PERCENT.withHistory(252));
+      .select(StockField.NAME, StockField.CHANGE_PERCENT)
+      .setRange(0, 150);
 
-    const rows = await screener.get();
+    const results = await screener.get();
 
-    for (const r of rows) {
-      const rawSymbol: string = r.s ?? '';
-      const nseSymbol = rawSymbol.replace(/^(NSE:|BSE:)/, '');
-      const perf = r['change_%|1y'] ?? r['Performance_1Y'] ?? r['Perf_1Y'] ?? 0;
-      result.set(nseSymbol, typeof perf === 'number' ? perf : 0);
+    for (const row of results.data) {
+      const raw = String(row.s ?? '');
+      const sym = raw.replace(/^(NSE:|BSE:)/, '');
+      const change = parseFloat(String(row['change_%'] ?? '0'));
+      map.set(sym, isNaN(change) ? 0 : change);
     }
   } catch {
-    try {
-      const screener = new StockScreener()
-        .where(StockField.COUNTRY.eq('India'))
-        .symbols(symbols)
-        .select(StockField.PERFORMANCE_1_YEAR);
-
-      const rows = await screener.get();
-
-      for (const r of rows) {
-        const rawSymbol: string = r.s ?? '';
-        const nseSymbol = rawSymbol.replace(/^(NSE:|BSE:)/, '');
-        const perf = r['Performance_1Y'] ?? r['Perf_1Y'] ?? 0;
-        result.set(nseSymbol, typeof perf === 'number' ? perf : 0);
-      }
-    } catch {
-    }
   }
 
-  return result;
+  return map;
 }

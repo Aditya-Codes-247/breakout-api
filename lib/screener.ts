@@ -1,4 +1,5 @@
 import { ScreenerClient } from 'screener-india';
+import type { CompanyMode } from 'screener-india';
 import type { ParsedFinancials } from './types.js';
 
 export const client = new ScreenerClient({
@@ -33,6 +34,59 @@ export async function parseFinancials(symbol: string): Promise<ParsedFinancials>
     promoterByQ: [], fiiByQ: [], diiByQ: [], mfCountByQ: [],
   };
 
+  // DIAGNOSTIC — remove after shape is confirmed
+  try {
+    const diag = await client.getCompanyTab(symbol, 'quarters', 'consolidated' as CompanyMode);
+    console.error('DIAG quarters keys:', Object.keys(diag.data ?? {}));
+    const qt = (diag.data as any).quarters;
+    console.error('DIAG quarters type:', typeof qt);
+    console.error('DIAG quarters keys2:', Object.keys(qt ?? {}));
+    console.error('DIAG quarters sample:', JSON.stringify(qt)?.substring(0, 600));
+  } catch(e) {
+    console.error('DIAG quarters failed:', e);
+  }
+
+  function extractRow(table: any, ...titleFragments: string[]): number[] {
+    if (!table) return [];
+
+    // Try shape A: { rows: [{ title, values }] }
+    if (Array.isArray(table.rows)) {
+      const row = table.rows.find((r: any) =>
+        titleFragments.some(f => String(r?.title ?? '').toLowerCase().includes(f.toLowerCase()))
+      );
+      if (row?.values) return row.values.map(parseNum);
+    }
+
+    // Try shape B: table is array of objects with a title field
+    if (Array.isArray(table)) {
+      const row = table.find((r: any) =>
+        titleFragments.some(f => String(r?.title ?? r?.name ?? '').toLowerCase().includes(f.toLowerCase()))
+      );
+      if (row?.values) return row.values.map(parseNum);
+      if (row?.data) return row.data.map(parseNum);
+    }
+
+    // Try shape C: { [rowTitle]: number[] }
+    for (const frag of titleFragments) {
+      for (const key of Object.keys(table)) {
+        if (key.toLowerCase().includes(frag.toLowerCase())) {
+          const val = table[key];
+          if (Array.isArray(val)) return val.map(parseNum);
+        }
+      }
+    }
+
+    return [];
+  }
+
+  function getColumns(table: any): string[] {
+    if (!table) return [];
+    if (Array.isArray(table.columns)) return table.columns;
+    if (Array.isArray(table.headers)) return table.headers;
+    if (Array.isArray(table)) return [];
+    return [];
+  }
+
   try {
     const [quartersRes, plRes, bsRes, cfRes, ratiosRes, shRes] = await Promise.allSettled([
       client.getCompanyTab(symbol, 'quarters', 'consolidated'),
@@ -42,21 +96,6 @@ export async function parseFinancials(symbol: string): Promise<ParsedFinancials>
       client.getCompanyTab(symbol, 'ratios', 'consolidated'),
       client.getCompanyTab(symbol, 'shareholding', 'consolidated'),
     ]);
-
-    function extractRow(table: any, ...titleFragments: string[]): number[] {
-      if (!table?.rows) return [];
-      const row = table.rows.find((r: any) =>
-        titleFragments.some(frag =>
-          String(r?.title ?? '').toLowerCase().includes(frag.toLowerCase())
-        )
-      );
-      if (!row?.values) return [];
-      return row.values.map((v: any) => parseNum(v));
-    }
-
-    function getColumns(table: any): string[] {
-      return table?.columns ?? [];
-    }
 
     if (quartersRes.status === 'fulfilled') {
       const t = quartersRes.value.data.quarters;

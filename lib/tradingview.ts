@@ -16,9 +16,9 @@ export async function fetchNSEUniverse(includeSME: boolean): Promise<TVStock[]> 
   const screener = new StockScreener();
 
   const results = await screener
-    .where(StockField.COUNTRY.eq('India'))
-    .where(StockField.MARKET_CAPITALIZATION.gt(includeSME ? 50_000_000 : 500_000_000))
-    .where(StockField.VOLUME.gt(50_000))
+    .where(StockField.EXCHANGE.isin(['NSE', 'BSE']))
+    .where(StockField.VOLUME.gt(100_000))
+    .where(StockField.MARKET_CAPITALIZATION.gt(includeSME ? 100_000_000 : 1_000_000_000))
     .select(
       StockField.NAME,
       StockField.PRICE,
@@ -31,24 +31,30 @@ export async function fetchNSEUniverse(includeSME: boolean): Promise<TVStock[]> 
     .setRange(0, 80)
     .get();
 
-  console.log('TV universe count:', results.data.length);
-  if (results.data.length > 0) console.log('TV first row:', JSON.stringify(results.data[0]));
+  console.log('TV raw count:', results.data.length);
+  console.log('TV first 3 rows:', JSON.stringify(results.data.slice(0, 3)));
+  console.log('TV columns in row 0:', Object.keys(results.data[0] ?? {}));
 
-  return results.data.map((row) => {
-    const rawSymbol = String(row['symbol'] ?? '');
-    const nseSymbol = rawSymbol.replace(/^(NSE|BSE):/, '');
-    return {
-      symbol: rawSymbol,
-      nseSymbol,
-      name: String(row['name'] ?? nseSymbol),
-      price: parseFloat(String(row['close'] ?? '0')) || 0,
-      marketCap: parseFloat(String(row['market_cap_basic'] ?? '0')) || 0,
-      pe: parseFloat(String(row['price_earnings_ttm'] ?? '0')) || 0,
-      roe: parseFloat(String(row['return_on_equity'] ?? '0')) || 0,
-      volume: parseFloat(String(row['volume'] ?? '0')) || 0,
-      changePercent1d: parseFloat(String(row['change'] ?? '0')) || 0,
-    };
-  });
+  return results.data
+    .filter(row => {
+      const sym = String(row['symbol'] ?? '');
+      return sym.startsWith('NSE:') || sym.startsWith('BSE:');
+    })
+    .map(row => {
+      const rawSymbol = String(row['symbol'] ?? '');
+      const nseSymbol = rawSymbol.replace(/^(NSE|BSE):/, '');
+      return {
+        symbol: rawSymbol,
+        nseSymbol,
+        name: String(row['name'] ?? nseSymbol),
+        price: parseFloat(String(row['close'] ?? '0')) || 0,
+        marketCap: parseFloat(String(row['market_cap_basic'] ?? '0')) || 0,
+        pe: parseFloat(String(row['price_earnings_ttm'] ?? '0')) || 0,
+        roe: parseFloat(String(row['return_on_equity'] ?? '0')) || 0,
+        volume: parseFloat(String(row['volume'] ?? '0')) || 0,
+        changePercent1d: parseFloat(String(row['change'] ?? '0')) || 0,
+      };
+    });
 }
 
 export async function fetchPriceReturn1yr(nseSymbols: string[]): Promise<Map<string, number>> {
